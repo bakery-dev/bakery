@@ -426,12 +426,8 @@ func (r *Registry) GetPiece(alias, name string) (*Piece, error) {
 	return LoadPiece(piecePath)
 }
 
-// PieceDir returns the on-disk directory for a piece (url:name).
-func (r *Registry) PieceDir(url, name string) string {
-	alias := r.aliasForURL(url)
-	if alias == "" {
-		return ""
-	}
+// PieceDir returns the on-disk directory for a piece (alias:name).
+func (r *Registry) PieceDir(alias, name string) string {
 	return filepath.Join(r.PiecesDir(alias), name)
 }
 
@@ -488,8 +484,9 @@ func (r *Registry) loadPiecesFor(alias string, into map[string]*Piece) {
 		if err != nil {
 			continue
 		}
-		url := r.registries[alias]
-		key := url + ":" + name
+		// Key by alias (not url) so piece refs are stable regardless of whether
+		// the alias points at a remote URL or a local path.
+		key := alias + ":" + name
 		into[key] = piece
 	}
 }

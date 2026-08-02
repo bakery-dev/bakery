@@ -25,7 +25,7 @@ var updateCmd = &cobra.Command{
 func runUpdate(args []string) error {
 	l := logger.WithModule("update")
 
-	reg, err := buildRegistry()
+	reg, err := buildRegistry(nil)
 	if err != nil {
 		return fmt.Errorf("build registry: %w", err)
 	}

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -32,6 +33,9 @@ Example:
 	},
 }
 
+// registryOverrides holds parsed --registry flags (alias=path or alias=url).
+var registryOverrides []string
+
 func runInit(pieRef, projectDir string) error {
 	l := logger.WithModule("init")
 
@@ -41,8 +45,12 @@ func runInit(pieRef, projectDir string) error {
 		return fmt.Errorf("invalid pie ref %q: %w", pieRef, err)
 	}
 
-	// Build registry from config.
-	reg, err := buildRegistry()
+	// Build registry from config, then apply --registry overrides.
+	overrides, err := parseRegistryFlags(registryOverrides)
+	if err != nil {
+		return fmt.Errorf("parse --registry: %w", err)
+	}
+	reg, err := buildRegistry(overrides)
 	if err != nil {
 		return fmt.Errorf("build registry: %w", err)
 	}
@@ -103,7 +111,8 @@ func runInit(pieRef, projectDir string) error {
 
 // buildRegistry creates a Registry and populates it from the koanf config.
 // Config keys: "registries.alias" = "<url>"
-func buildRegistry() (*registry.Registry, error) {
+// overrides (from --registry flags) are applied last and take precedence.
+func buildRegistry(overrides map[string]string) (*registry.Registry, error) {
 	l := logger.WithModule("registry")
 	reg := registry.New(l)
 
@@ -120,12 +129,49 @@ func buildRegistry() (*registry.Registry, error) {
 		if url == "" {
 			continue
 		}
+		if _, overridden := overrides[alias]; overridden {
+			continue // --registry override will handle this alias.
+		}
 		if err := reg.Update(alias, url); err != nil {
 			l.Warn("update registry failed (will retry later)", "alias", alias, "error", err)
 		}
 	}
 
+	// Apply --registry overrides last so they win over config entries.
+	for alias, val := range overrides {
+		if err := reg.Update(alias, resolveRegistryValue(val)); err != nil {
+			return nil, fmt.Errorf("override registry %q: %w", alias, err)
+		}
+		l.Info("registry overridden", "alias", alias, "value", val)
+	}
+
 	return reg, nil
+}
+
+// parseRegistryFlags parses repeated --registry flags of form "alias=value".
+// value may be a local directory path or a remote repo URL.
+func parseRegistryFlags(flags []string) (map[string]string, error) {
+	out := make(map[string]string, len(flags))
+	for _, f := range flags {
+		idx := strings.Index(f, "=")
+		if idx <= 0 || idx == len(f)-1 {
+			return nil, fmt.Errorf("expected alias=path, got %q", f)
+		}
+		out[f[:idx]] = f[idx+1:]
+	}
+	return out, nil
+}
+
+// resolveRegistryValue normalizes a --registry flag value for the registry.
+// An existing directory is resolved to an absolute path so it is treated as a
+// local registry; anything else is passed through as a remote repo URL.
+func resolveRegistryValue(val string) string {
+	if info, err := os.Stat(val); err == nil && info.IsDir() {
+		if abs, err := filepath.Abs(val); err == nil {
+			return abs
+		}
+	}
+	return val
 }
 
 // updateAllRegistries calls Update for every registered registry alias.
@@ -222,5 +268,7 @@ func parsePieceKey(key string) (alias, name string, ok bool) {
 }
 
 func init() {
+	initCmd.Flags().StringArrayVar(&registryOverrides, "registry", nil,
+		"Override a registry alias with a local path or a different repo URL (alias=path). Repeatable.")
 	rootCmd.AddCommand(initCmd)
 }

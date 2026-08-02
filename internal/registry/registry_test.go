@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"log/slog"
@@ -47,6 +48,36 @@ func setupValidLocalRegistry(t *testing.T) string {
 	}
 
 	return dir
+}
+
+func TestAllPiecesKeyedByAlias(t *testing.T) {
+	tmpDir := setupValidLocalRegistry(t)
+	reg := New(newTestLogger())
+
+	const alias = "myalias"
+	if err := reg.Update(alias, tmpDir); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	all := reg.AllPieces()
+	// Key must be alias:name, NOT the filesystem path, so piece refs stay
+	// stable whether the alias points at a local path or a remote URL.
+	if _, ok := all[alias+":demo"]; !ok {
+		t.Errorf("AllPieces keys = %v, want key %q", keys(all), alias+":demo")
+	}
+	for k := range all {
+		if strings.Contains(k, tmpDir) {
+			t.Errorf("piece key %q must not embed the registered path", k)
+		}
+	}
+}
+
+func keys(m map[string]*Piece) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 func TestBuildRemoteURL(t *testing.T) {
