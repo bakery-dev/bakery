@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+    labels:
+      - dependencies
+      - go
+    # Allow only minor and patch updates; skip major version bumps.
+    allow:
+      - dependency-type: all
+        update-type:
+          - version-update:semver-minor
+          - version-update:semver-patch
