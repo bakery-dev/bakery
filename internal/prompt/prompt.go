@@ -35,6 +35,19 @@ func (p *Prompter) Run(ctx *resolver.ResolutionContext, useDefaults bool) (map[s
 
 	answers := make(map[string]any)
 
+	// Non-interactive mode: apply each prompt's configured default directly,
+	// skipping the TUI form entirely. Pre-filled piefile answers are honored.
+	if useDefaults {
+		for _, item := range ctx.PendingPrompts {
+			if isPrefilled(ctx.Pie.Pieces, item.PieceKey) {
+				continue
+			}
+			answers[item.PieceKey] = defaultValue(item.Prompt)
+			p.log.Debug("default applied", "piece", item.PieceKey, "answer", answers[item.PieceKey])
+		}
+		return answers, nil
+	}
+
 	var fields []huh.Field
 
 	for _, item := range ctx.PendingPrompts {
@@ -54,11 +67,6 @@ func (p *Prompter) Run(ctx *resolver.ResolutionContext, useDefaults bool) (map[s
 
 	group := huh.NewGroup(fields...)
 	form := huh.NewForm(group)
-
-	// Non-interactive mode when useDefaults is true.
-	if useDefaults {
-		form = form.WithAccessible(true)
-	}
 
 	if err := form.Run(); err != nil {
 		return nil, fmt.Errorf("run prompt form: %w", err)
@@ -81,6 +89,24 @@ func (p *Prompter) Run(ctx *resolver.ResolutionContext, useDefaults bool) (map[s
 	}
 
 	return answers, nil
+}
+
+// defaultValue returns the default value for a prompt, falling back to the
+// zero value for its type when no default is configured.
+func defaultValue(pr *registry.Prompt) any {
+	if pr.Default != nil {
+		return pr.Default
+	}
+	switch pr.Type {
+	case "confirm":
+		return false
+	case "select", "input":
+		return ""
+	case "multi_select":
+		return []string{}
+	default:
+		return nil
+	}
 }
 
 // buildField creates a huh.Field from a PromptItem.

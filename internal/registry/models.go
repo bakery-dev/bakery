@@ -70,5 +70,14 @@ func LoadPie(path string) (*Pie, error) {
 	if err := yaml.Unmarshal(data, &pie); err != nil {
 		return nil, fmt.Errorf("parse pie file %s: %w", path, err)
 	}
+
+	// YAML maps an empty pie entry (e.g. "alias:piece:" with no body) to a nil
+	// *PieEntry. Normalize so a missing answer consistently means "prompt".
+	for k, v := range pie.Pieces {
+		if v == nil {
+			pie.Pieces[k] = &PieEntry{}
+		}
+	}
+
 	return &pie, nil
 }
