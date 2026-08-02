@@ -1,0 +1,15 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+    labels:
+      - dependencies
+      - go
+    # Block major version bumps for all dependencies (direct + indirect).
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
