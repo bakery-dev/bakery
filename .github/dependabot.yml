@@ -9,8 +9,25 @@ updates:
     labels:
       - dependencies
       - go
-    # Block major version bumps; minor and patch updates are allowed.
+    # Block major version bumps per direct dependency (schema requires
+    # dependency-name; no wildcard supported). Indirect deps are not listed
+    # here — a rare indirect major bump may still open a PR.
     ignore:
-      - dependency-type: all
-        update-types:
-          - version-update:semver-major
+      - dependency-name: "github.com/adrg/xdg"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "github.com/charmbracelet/huh"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "github.com/knadh/koanf/parsers/yaml"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "github.com/knadh/koanf/providers/env"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "github.com/knadh/koanf/providers/file"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "github.com/knadh/koanf/v2"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "github.com/spf13/cobra"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "golang.org/x/mod"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "gopkg.in/yaml.v3"
+        update-types: ["version-update:semver-major"]
