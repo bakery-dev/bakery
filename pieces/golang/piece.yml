@@ -1,0 +1,10 @@
+name: "golang"
+description: "Base Golang piece"
+author: "bakery-dev team"
+
+provides:
+  - "go"
+
+actions:
+  - "go:init"
+  - "go:tidy"

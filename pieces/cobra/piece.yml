@@ -1,0 +1,12 @@
+name: "cobra"
+description: "Cobra CLI template"
+author: "bakery-dev team"
+
+provides:
+  - "cli"
+
+depends_on:
+  - "go"
+
+actions:
+  - "go:get github.com/spf13/cobra@latest"

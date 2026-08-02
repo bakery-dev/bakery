@@ -1,0 +1,6 @@
+name: "cli"
+description: "Base CLI template (currently just go)"
+pieces:
+  "bakery-dev/bakery:git":
+  "bakery-dev/bakery:cobra":
+    answer: true

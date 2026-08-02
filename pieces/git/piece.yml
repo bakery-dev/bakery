@@ -1,0 +1,15 @@
+name: "git"
+description: "Git version control piece"
+author: "bakery-dev team"
+
+provides:
+  - "vcs"
+  - "git"
+
+prompt:
+  type: "confirm"
+  title: "Initialize a git repository?"
+  default: true
+
+actions:
+  - "git:init"
