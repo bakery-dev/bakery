@@ -19,30 +19,48 @@ import (
 )
 
 var initCmd = &cobra.Command{
-	Use:   "init <pie> <project>",
+	Use:   "init [<pie>] <project>",
 	Short: "Scaffold a new project from a Pie",
 	Long: `Resolve a Pie, prompt for piece options, render templates, and run actions.
 
-Example:
+The <pie> positional is required unless --piefile is given, in which case the
+pie is loaded from the file and only <project> is passed.
+
+Examples:
   bakery init core:cli my-app
-  bakery init core:cli my-app --defaults`,
-	Args:         cobra.ExactArgs(2),
+  bakery init core:cli my-app --defaults
+  bakery init my-app --piefile ./piefile.yaml`,
+	Args: func(_ *cobra.Command, args []string) error {
+		if pieFile != "" {
+			if len(args) != 1 {
+				return fmt.Errorf("with --piefile: expected 1 argument <project>, got %d", len(args))
+			}
+			return nil
+		}
+		if len(args) != 2 {
+			return fmt.Errorf("expected <pie> <project>, got %d argument(s)", len(args))
+		}
+		return nil
+	},
 	SilenceUsage: true,
 	RunE: func(_ *cobra.Command, args []string) error {
-		return runInit(args[0], args[1])
+		return runInit(args)
 	},
 }
 
 // registryOverrides holds parsed --registry flags (alias=path or alias=url).
 var registryOverrides []string
 
-func runInit(pieRef, projectDir string) error {
+func runInit(args []string) error {
 	l := logger.WithModule("init")
 
-	// Parse pie reference.
-	pieName, err := extractPieName(pieRef)
-	if err != nil {
-		return fmt.Errorf("invalid pie ref %q: %w", pieRef, err)
+	// With --piefile, the pie comes from a local file and only <project> is
+	// passed; otherwise <pie> <project> are expected.
+	var pieRef, projectDir string
+	if pieFile != "" {
+		projectDir = args[0]
+	} else {
+		pieRef, projectDir = args[0], args[1]
 	}
 
 	// Build registry from config, then apply --registry overrides.
@@ -60,12 +78,26 @@ func runInit(pieRef, projectDir string) error {
 		return fmt.Errorf("update registries: %w", err)
 	}
 
-	// Load the pie.
-	pie, err := reg.FindPie(pieName)
-	if err != nil {
-		return fmt.Errorf("find pie %q: %w", pieName, err)
+	// Load the pie: from a local piefile when given, else from a registry.
+	var pie *registry.Pie
+	if pieFile != "" {
+		pie, err = registry.LoadPie(pieFile)
+		if err != nil {
+			return fmt.Errorf("load piefile %s: %w", pieFile, err)
+		}
+		l.Info("loaded pie from file", "path", pieFile, "pieces", len(pie.Pieces))
+	} else {
+		var pieName string
+		pieName, err = extractPieName(pieRef)
+		if err != nil {
+			return fmt.Errorf("invalid pie ref %q: %w", pieRef, err)
+		}
+		pie, err = reg.FindPie(pieName)
+		if err != nil {
+			return fmt.Errorf("find pie %q: %w", pieName, err)
+		}
+		l.Info("loaded pie", "name", pie.Name)
 	}
-	l.Info("loaded pie", "name", pie.Name)
 
 	// Resolve pieces.
 	res := resolver.New(l, reg)
