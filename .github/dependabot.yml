@@ -9,9 +9,8 @@ updates:
     labels:
       - dependencies
       - go
-    # Allow only minor and patch updates; skip major version bumps.
-    allow:
+    # Block major version bumps; minor and patch updates are allowed.
+    ignore:
       - dependency-type: all
-        update-type:
-          - version-update:semver-minor
-          - version-update:semver-patch
+        update-types:
+          - version-update:semver-major
