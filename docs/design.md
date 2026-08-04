@@ -96,14 +96,22 @@ To store remote registries, caches, and global configurations, the CLI must adhe
     * **Output:** Returns a fully answered mapping of pieces that are enabled.
 
 ### 4.7. Module: `engine` (Scaffolder)
-* **Purpose:** Copies files and executes templates.
+* **Purpose:** Copies files, renders templates, and writes generated state files.
 * **Requirements:**
     * Accepts a logger (`module=engine`).
     * Takes the final list of enabled pieces, their answers, and their exact Git commit hashes (resolved by the registry).
-    * Provides this fully resolved state directly to the `text/template` context, ensuring templates can conditionally render based on the active pieces.
-    * For each piece, iterates through its `template/` directory in the XDG registry cache.
-    * Passes every file through Go's `text/template`.
-    * Writes the templated files into the target `<project-name>` directory.
+    * **Owns the template context.** The engine is the single source of truth for every variable exposed to templates; it assembles the context (`buildContext`) from three categories:
+        * **Well-known variables** — generic, language-agnostic values derived by the engine itself from raw inputs supplied by the `cmd` module (e.g. the target project directory). These are deliberately *not* injected by `cmd`; the command layer passes raw inputs only. The currently supported well-known variable is:
+            * `ProjectName` (`string`) — base name of the target project directory.
+        * **Piece answer variables** — one entry per piece that was interactively prompted at runtime, keyed by its full piece key (`alias:name`). Values are typed by prompt type (`bool` for confirm, `string` for select/input, `[]string` for multi-select). Because keys contain a colon, they must be referenced with the `index` function, e.g. `{{ index . "core:cobra" }}`. Pieces whose answer is pre-filled in the piefile are currently *not* injected into the context — only pieces actually prompted appear.
+        * **`Capabilities`** — a `map[string]bool` that is the union of every active piece's `provides:` list, enabling conditional rendering such as `{{ if index .Capabilities "cli" }}`.
+    * **Content rendering:** For each piece, iterates through its `template/` directory in the XDG registry cache and passes every file's *contents* through Go's `text/template` using the context above.
+    * **Path rendering (token substitution):** In addition to contents, the *path* of each file — both directory names and the file name — is rendered via simple **variable replacement** of `__Name__` tokens. This is deliberately *not* `text/template`: no functions, pipelines, conditionals, or `{{ }}` syntax are supported in paths, only literal `__Variable__` substitution.
+        * Only well-known variables are valid path tokens. The sole supported token today is `__ProjectName__` (e.g. `template/cmd/__ProjectName__/root.go` renders to `cmd/<project-name>/root.go`).
+        * **Unknown tokens are a fatal error.** A path containing `__Foo__` where `Foo` is not a known variable aborts scaffolding, which catches typos such as `__ProjecName__`.
+        * **An empty rendered segment is a fatal error.** A token that resolves to an empty string, or any segment that is empty, `.`, or `..` after rendering, aborts scaffolding.
+        * Substitution is performed per path segment, and a rendered value may never introduce additional path separators (see §5). Piece answer variables are intentionally excluded from path tokens for now (see §6.4).
+    * Writes the rendered files into the target `<project-name>` directory.
     * At the end, writes the generated `piefile.yaml` and `pielock` (containing the exact commit hashes) into the target directory root.
 
 ### 4.8. Module: `executor`
@@ -121,7 +129,7 @@ To store remote registries, caches, and global configurations, the CLI must adhe
 
 Given that the CLI fetches templates and configurations from remote repositories, strict security boundaries must be enforced by the underlying modules:
 
-1. **Path Traversal Protection:** Under no circumstances is the `engine` module allowed to write, modify, or delete files outside of the resolved `<project-name>` target directory. All destination paths must be sanitized using Go's `filepath.Clean` and rigorously validated to ensure they do not escape the target project root (e.g., blocking `../`).
+1. **Path Traversal Protection:** Under no circumstances is the `engine` module allowed to write, modify, or delete files outside of the resolved `<project-name>` target directory. Because template paths may now contain rendered variable tokens (`__Name__`), sanitization must be performed **after** rendering: each path segment is validated individually (it must be non-empty, must not be `.` or `..`, and must not contain `/`, `\`, or a NUL byte, so a variable value can never smuggle extra directory depth), and the final resolved destination is confirmed to remain within the target root via `filepath.Clean` plus a robust relativity/prefix check (e.g., blocking `../`).
 2. **Symlink Prohibition:** Symlinks are explicitly forbidden inside piece `template/` directories. This prevents malicious pieces from orchestrating symlink-based path traversal attacks against the user's filesystem or the local registry cache.
     * *Validation:* The CLI must proactively scan files for the `os.ModeSymlink` bit before reading or copying templates. If a symlink is detected, the CLI must immediately halt and abort the process with a fatal error.
 3. **Ecosystem Action Sandboxing:** As noted in the `executor` module, pieces cannot declare arbitrary bash scripts. They can only request predefined actions which are securely implemented by the CLI.
@@ -134,3 +142,4 @@ Given that the CLI fetches templates and configurations from remote repositories
 2. **Partial Template Overwrites:** If multiple pieces contain a file with the exact same path (e.g., `main.go`), how does the `engine` handle the collision? Does it overwrite, error out, or do we rely on the `resolver` to prevent capability collisions from creating overlapping files?
 3. **macOS XDG Enforcement:** Do we want to strictly use `~/Library/...` on macOS (which is the Apple standard), or force standard Linux `~/.config` across all Unix-like platforms for consistency?
 4. **Template Piece State Lookups:** The templating engine will receive the resolved piece state, but how exactly should templates query this state safely? Since there can be multiple pieces with the same name from different repositories, writing full repo URLs inside template `{{ if }}` blocks might be brittle and unergonomic. We need a clean abstraction for this.
+    * *Update:* The variable source is now centralized in the engine's `buildContext` (see §4.7). Piece answers are keyed by full `alias:name` and referenced via `{{ index . "alias:name" }}`; the `Capabilities` map covers the common "is this capability present?" case. **Path templating** is intentionally restricted to a small set of well-known, generic variables (`ProjectName` today) via `__Name__` tokens. Piece-declared variables (which would let, e.g., a Go piece expose a `ModuleName`) are a deliberate future extension and remain out of scope.

@@ -320,3 +320,128 @@ func TestExecute_PiefileContent(t *testing.T) {
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
+
+// writeTemplateFile creates a file under a piece's template/ directory at the
+// given relative (potentially token-bearing) path.
+func writeTemplateFile(t *testing.T, tmplDir, relPath, content string) {
+	t.Helper()
+	full := filepath.Join(tmplDir, relPath)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRenderSegment(t *testing.T) {
+	wk := map[string]string{"ProjectName": "myapp"}
+
+	tests := []struct {
+		name    string
+		seg     string
+		want    string
+		wantErr string
+	}{
+		{name: "known token", seg: "__ProjectName__", want: "myapp"},
+		{name: "token plus extension", seg: "__ProjectName__.go", want: "myapp.go"},
+		{name: "token embedded in name", seg: "cmd-__ProjectName__", want: "cmd-myapp"},
+		{name: "literal passthrough", seg: "root.go", want: "root.go"},
+		{name: "unknown token errors", seg: "__Foo__", wantErr: "unknown path variable __Foo__"},
+		{name: "typo token errors", seg: "__ProjecName__", wantErr: "unknown path variable __ProjecName__"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := renderSegment(tc.seg, wk)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil (result=%q)", tc.wantErr, got)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error %q does not contain %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRenderSegment_RejectsUnsafeValues(t *testing.T) {
+	cases := map[string]string{
+		"value with slash": "a/b",
+		"value traversal":  "..",
+		"value dot":        ".",
+		"value backslash":  `a\b`,
+		"value empty":      "",
+	}
+	for name, val := range cases {
+		t.Run(name, func(t *testing.T) {
+			wk := map[string]string{"ProjectName": val}
+			if _, err := renderSegment("__ProjectName__", wk); err == nil {
+				t.Fatalf("expected error for value %q, got nil", val)
+			}
+		})
+	}
+}
+
+func TestRenderRelPath(t *testing.T) {
+	wk := map[string]string{"ProjectName": "myapp"}
+	got, err := renderRelPath("cmd/__ProjectName__/__ProjectName__.go", wk)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := "cmd/myapp/myapp.go"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestExecute_RendersPathTokensAndProjectName(t *testing.T) {
+	srcDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// A directory and a file name both carry the __ProjectName__ token, and the
+	// content references the centralized ProjectName variable (no cmd injection).
+	writeTemplateFile(t, filepath.Join(srcDir, "template"),
+		filepath.Join("cmd", "__ProjectName__", "__ProjectName__.go"),
+		"package {{ .ProjectName }}")
+
+	pieces := []*resolver.ResolvedPiece{newTestPiece(srcDir)}
+	e := newTestEngine(t)
+	if err := e.Execute(targetDir, pieces, nil, nil); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	expected := filepath.Base(targetDir)
+	dest := filepath.Join(targetDir, "cmd", expected, expected+".go")
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read %s: %v", dest, err)
+	}
+	if want := "package " + expected; string(got) != want {
+		t.Errorf("content = %q, want %q", got, want)
+	}
+}
+
+func TestExecute_UnknownPathTokenErrors(t *testing.T) {
+	srcDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	writeTemplateFile(t, filepath.Join(srcDir, "template"),
+		filepath.Join("__Foo__", "x.go"), "x")
+
+	pieces := []*resolver.ResolvedPiece{newTestPiece(srcDir)}
+	e := newTestEngine(t)
+	err := e.Execute(targetDir, pieces, nil, nil)
+	if err == nil {
+		t.Fatal("expected error for unknown path token, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown path variable") {
+		t.Errorf("error %q does not mention unknown path variable", err.Error())
+	}
+}
