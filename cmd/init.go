@@ -116,7 +116,6 @@ func runInit(args []string) error {
 	if answers == nil {
 		answers = make(map[string]any)
 	}
-	answers["ProjectName"] = filepath.Base(projectDir)
 
 	// Determine active pieces and collect actions.
 	activePieces, actions := collectActivePieces(ctx, answers)

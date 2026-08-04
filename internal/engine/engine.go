@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -41,8 +42,13 @@ func (e *Engine) Execute(targetDir string, pieces []*resolver.ResolvedPiece, ans
 		return fmt.Errorf("create target dir %s: %w", absTarget, err)
 	}
 
+	// Well-known template variables are derived by the engine from raw inputs
+	// (the target directory). They are the only values permitted in path
+	// tokens; see renderRelPath. The cmd layer supplies raw inputs only.
+	wk := wellKnownVars(absTarget)
+
 	// Build template context from answers.
-	ctx := e.buildContext(pieces, answers)
+	ctx := e.buildContext(pieces, answers, wk)
 
 	// Process each piece's templates.
 	for _, piece := range pieces {
@@ -57,7 +63,7 @@ func (e *Engine) Execute(targetDir string, pieces []*resolver.ResolvedPiece, ans
 			continue
 		}
 
-		if err := e.processPiece(templateDir, absTarget, ctx); err != nil {
+		if err := e.processPiece(templateDir, absTarget, ctx, wk); err != nil {
 			return fmt.Errorf("process piece %s: %w", piece.Key, err)
 		}
 	}
@@ -75,10 +81,14 @@ func (e *Engine) Execute(targetDir string, pieces []*resolver.ResolvedPiece, ans
 	return nil
 }
 
-// buildContext merges answers into a map usable by text/template,
-// and injects a Capabilities map.
-func (e *Engine) buildContext(pieces []*resolver.ResolvedPiece, answers map[string]any) map[string]any {
+// buildContext merges well-known variables, prompt answers, and a
+// Capabilities map into a single context usable by text/template. The engine
+// is the sole source of truth for every template variable.
+func (e *Engine) buildContext(pieces []*resolver.ResolvedPiece, answers map[string]any, wk map[string]string) map[string]any {
 	ctx := make(map[string]any)
+	for k, v := range wk {
+		ctx[k] = v
+	}
 	for k, v := range answers {
 		ctx[k] = v
 	}
@@ -98,7 +108,7 @@ func (e *Engine) buildContext(pieces []*resolver.ResolvedPiece, answers map[stri
 
 // processPiece walks templateDir, executes each file as a template, and
 // writes the result into the sanitized destination under absTarget.
-func (e *Engine) processPiece(templateDir, absTarget string, ctx map[string]any) error {
+func (e *Engine) processPiece(templateDir, absTarget string, ctx map[string]any, wk map[string]string) error {
 	return filepath.WalkDir(templateDir, func(srcPath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -124,8 +134,16 @@ func (e *Engine) processPiece(templateDir, absTarget string, ctx map[string]any)
 			return fmt.Errorf("rel path %s: %w", srcPath, err)
 		}
 
+		// Render __Variable__ tokens in directory and file names. Only
+		// well-known variables are permitted; unknown tokens and invalid
+		// results are fatal.
+		rendered, rerr := renderRelPath(rel, wk)
+		if rerr != nil {
+			return fmt.Errorf("render path %q: %w", rel, rerr)
+		}
+
 		// Sanitize destination.
-		dest := filepath.Join(absTarget, rel)
+		dest := filepath.Join(absTarget, rendered)
 		dest = filepath.Clean(dest)
 
 		// Path traversal check: dest must start with absTarget.
@@ -257,5 +275,78 @@ func (e *Engine) writePielock(absTarget string, commits map[string]string) error
 	}
 
 	e.log.Info("wrote pielock", "path", path)
+	return nil
+}
+
+// wellKnownVars derives the well-known template variables from raw engine
+// inputs. These are generic, language-agnostic values that every template
+// (both file contents and path tokens) may rely on. The engine is the sole
+// source of truth for them; the command layer supplies raw inputs only.
+func wellKnownVars(absTarget string) map[string]string {
+	return map[string]string{
+		"ProjectName": filepath.Base(absTarget),
+	}
+}
+
+// pathTokenRe matches a __Name__ token within a path segment. A name is one or
+// more alphanumeric characters or underscores delimited by double underscores.
+var pathTokenRe = regexp.MustCompile(`__([A-Za-z0-9_]+)__`)
+
+// renderRelPath substitutes __Variable__ tokens in every segment of rel (both
+// directory names and the file name) using only the well-known variables. Each
+// rendered segment is validated; unknown tokens, empty segments, and segments
+// that would introduce extra path depth are fatal errors.
+func renderRelPath(rel string, wk map[string]string) (string, error) {
+	rel = filepath.ToSlash(rel)
+	segments := strings.Split(rel, "/")
+	for i, seg := range segments {
+		rendered, err := renderSegment(seg, wk)
+		if err != nil {
+			return "", fmt.Errorf("segment %q: %w", seg, err)
+		}
+		segments[i] = rendered
+	}
+	return strings.Join(segments, "/"), nil
+}
+
+// renderSegment substitutes tokens within a single path segment and validates
+// the result against the path-safety rules.
+func renderSegment(seg string, wk map[string]string) (string, error) {
+	var unknown string
+	rendered := pathTokenRe.ReplaceAllStringFunc(seg, func(tok string) string {
+		name := tok[2 : len(tok)-2] // strip __ delimiters
+		if val, ok := wk[name]; ok {
+			return val
+		}
+		if unknown == "" {
+			unknown = name
+		}
+		return tok
+	})
+	if unknown != "" {
+		return "", fmt.Errorf("unknown path variable __%s__", unknown)
+	}
+	if err := validateSegment(rendered); err != nil {
+		return "", err
+	}
+	return rendered, nil
+}
+
+// validateSegment enforces that a (rendered) path segment is safe to embed:
+// non-empty, not a directory-traversal entry, and free of separators or NUL so
+// a variable value can never smuggle extra directory depth.
+func validateSegment(seg string) error {
+	switch seg {
+	case "":
+		return fmt.Errorf("empty path segment")
+	case ".", "..":
+		return fmt.Errorf("invalid path segment %q", seg)
+	}
+	if strings.ContainsAny(seg, `\/`) {
+		return fmt.Errorf("path segment contains a separator: %q", seg)
+	}
+	if strings.ContainsRune(seg, 0) {
+		return fmt.Errorf("path segment contains a NUL byte")
+	}
 	return nil
 }
