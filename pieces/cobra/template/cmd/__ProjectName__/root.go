@@ -9,17 +9,17 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "{{ if .ProjectName }}{{ .ProjectName }}{{ else }}app{{ end }}",
+	Use:   "{{ .ProjectName }}",
 	Short: "A brief description of your application",
 	Long:  `A longer description that spans multiple lines and likely contains examples and usage of using your application.`,
 	Run: func(_ *cobra.Command, _ []string) {
-		fmt.Println("Hello from {{ if .ProjectName }}{{ .ProjectName }}{{ else }}app{{ end }}!")
+		fmt.Println("Hello from {{ .ProjectName }}!")
 	},
 }
 
+// Execute runs the root command.
 func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }

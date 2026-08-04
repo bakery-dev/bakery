@@ -110,7 +110,7 @@ To store remote registries, caches, and global configurations, the CLI must adhe
         * Only well-known variables are valid path tokens. The sole supported token today is `__ProjectName__` (e.g. `template/cmd/__ProjectName__/root.go` renders to `cmd/<project-name>/root.go`).
         * **Unknown tokens are a fatal error.** A path containing `__Foo__` where `Foo` is not a known variable aborts scaffolding, which catches typos such as `__ProjecName__`.
         * **An empty rendered segment is a fatal error.** A token that resolves to an empty string, or any segment that is empty, `.`, or `..` after rendering, aborts scaffolding.
-        * Substitution is performed per path segment, and a rendered value may never introduce additional path separators (see §5). Piece answer variables are intentionally excluded from path tokens for now (see §6.4).
+        * Substitution is performed per path segment, and a rendered value may never introduce additional path separators (see §5). Piece answer variables are intentionally excluded from path tokens for now (see §7.4).
     * Writes the rendered files into the target `<project-name>` directory.
     * At the end, writes the generated `piefile.yaml` and `pielock` (containing the exact commit hashes) into the target directory root.
 
@@ -136,7 +136,41 @@ Given that the CLI fetches templates and configurations from remote repositories
 
 ---
 
-## 6. Open Questions & Considerations
+## 6. Piece Composition Conventions
+
+These conventions govern how pieces layer together in the generated project. They are architectural constraints, not style preferences, and follow directly from the host language's semantics.
+
+### 6.1 Entrypoint Ownership
+
+A runnable application's entrypoint (`func main()` in Go) is owned **wholly by the app-type piece** that defines the application's nature (e.g. `cobra` for a CLI). Base "plumbing" pieces (e.g. `golang`, which provides `go.mod` initialization and tooling) never contribute an entrypoint.
+
+Rationale: Go permits exactly one `func main()` per `package main` directory and provides **no late binding** — every top-level identifier must be unique and resolve at compile time. This rules out a "base piece ships a default `main()`, app piece overrides it" model: two `func main()` (or two of any same-named top-level function) in one package is a fatal `redeclared` compile error, and Go has no override mechanism. The only alternative — a base `main()` that dispatches to capability-specific functions via templated `{{ if .Capabilities.* }}` branches — would force the base piece to enumerate every higher-level app type, turning it into a growing switchboard and re-introducing exactly the coupling the capability model exists to avoid. Self-contained entrypoints sidestep all of this.
+
+Consequence: a project composed of plumbing pieces only (e.g. `golang` alone) is a library/module with no entrypoint and will not produce a binary — which is correct.
+
+### 6.2 Same-Package Identifier Uniqueness
+
+When the engine layers multiple pieces into the same package directory, all files are merged into a single package namespace. No two files may declare the same top-level identifier (function, variable, type, constant). Pieces that share a directory must coordinate on distinct names; otherwise the generated project fails to compile with a `redeclared` error.
+
+### 6.3 Canonical Go Entrypoint Location
+
+A runnable Go application's entrypoint lives at `cmd/__ProjectName__/` and is always `package main`:
+
+```
+.
+├── go.mod                       # module <ProjectName>  (from the golang piece's go:init)
+└── cmd/
+    └── __ProjectName__/
+        └── root.go              # package main: rootCmd, Execute(), main()  (cobra piece)
+```
+
+The directory name is the app/binary name (rendered via path templating, §4.7); the package is **always `main`**, never a named package derived from the app name — a hyphenated `ProjectName` such as `my-app` is a valid path and import-path segment but an invalid Go identifier. The entrypoint is self-contained (no cross-package imports), so it needs no module path in templates. Build and run with `go build ./cmd/<name>` / `go run ./cmd/<name>`.
+
+A cobra-cli-style split (a root-level `main.go` importing `<module>/cmd/<app>`) is deliberately avoided: today `go:init` sets the module path to `filepath.Base(targetDir)` (i.e. `ProjectName`), so any import path would have to be assembled from `{{ .ProjectName }}` — fragile, and blocked on the deferred `ModuleName` variable (§7.4).
+
+---
+
+## 7. Open Questions & Considerations
 
 1. **Registry Authentication:** How do we handle fetching registries from private Git repositories? Should we rely on the host's existing `~/.ssh/config` and local Git CLI credentials, or build native Git auth handling via a Go-Git library?
 2. **Partial Template Overwrites:** If multiple pieces contain a file with the exact same path (e.g., `main.go`), how does the `engine` handle the collision? Does it overwrite, error out, or do we rely on the `resolver` to prevent capability collisions from creating overlapping files?
