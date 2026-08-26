@@ -17,7 +17,8 @@
           pname = "bakery";
           version = "0.1.0";
           src = ./.;
-          vendorHash = "sha256-bdcDu+VpoYZ9W2aGbfbCuOD/vwsU39mfS7yIFgMUBWY=";
+          vendorHash = "sha256-ebBSFDf2cmdqI7kLnosU0Inn2RQzWTenxHqf5cQd5Is=";
+          go = pkgs.go_1_27;
           ldflags = [ "-s" "-w" ];
           meta = with pkgs.lib; {
             description = "Project scaffolding CLI powered by composable pieces";
@@ -52,7 +53,7 @@
         in {
           default = pkgs.mkShell {
             buildInputs = with pkgs; [
-              go
+              go_1_27
               gopls
               gotools
               golangci-lint-pinned
