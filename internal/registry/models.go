@@ -35,9 +35,9 @@ type Option struct {
 
 // Pie matches the piefile.yaml schema.
 type Pie struct {
-	Name        string                    `yaml:"name"`
-	Description string                    `yaml:"description"`
-	Pieces      map[string]*PieEntry      `yaml:"pieces"`
+	Name        string               `yaml:"name"`
+	Description string               `yaml:"description"`
+	Pieces      map[string]*PieEntry `yaml:"pieces"`
 }
 
 // PieEntry holds a referenced piece and its pre-filled answer.

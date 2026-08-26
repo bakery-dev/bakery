@@ -216,7 +216,7 @@ func TestResolveMissingPiece(t *testing.T) {
 func TestResolvePendingPrompts(t *testing.T) {
 	reg := newMock()
 	reg.Add("core:cobra", &registry.Piece{
-		Name: "cobra",
+		Name:   "cobra",
 		Prompt: &registry.Prompt{Type: "confirm", Title: "Include Cobra?"},
 	})
 

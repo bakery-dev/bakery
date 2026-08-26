@@ -20,11 +20,11 @@ type Action struct {
 // allowedActions is the whitelist of ecosystem actions.
 // Arbitrary command execution is strictly forbidden.
 var allowedActions = map[string]Action{
-	"go:tidy":       {Command: "go", Args: []string{"mod", "tidy"}},
-	"go:build":      {Command: "go", Args: []string{"build", "./..."}},
-	"npm:install":   {Command: "npm", Args: []string{"install"}},
-	"pnpm:install":  {Command: "pnpm", Args: []string{"install"}},
-	"git:init":      {Command: "git", Args: []string{"init"}},
+	"go:tidy":      {Command: "go", Args: []string{"mod", "tidy"}},
+	"go:build":     {Command: "go", Args: []string{"build", "./..."}},
+	"npm:install":  {Command: "npm", Args: []string{"install"}},
+	"pnpm:install": {Command: "pnpm", Args: []string{"install"}},
+	"git:init":     {Command: "git", Args: []string{"init"}},
 }
 
 // Executor runs pre-approved ecosystem actions inside a target directory.
@@ -84,7 +84,7 @@ func (e *Executor) parseAction(name, targetDir string) (Action, error) {
 	if a, ok := allowedActions[name]; ok {
 		return a, nil
 	}
-	
+
 	// Dynamic go:get action
 	if strings.HasPrefix(name, "go:get ") {
 		pkg := strings.TrimSpace(strings.TrimPrefix(name, "go:get "))
