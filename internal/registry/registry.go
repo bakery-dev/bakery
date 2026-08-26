@@ -19,9 +19,9 @@ import (
 type Registry struct {
 	log        *slog.Logger
 	dataDir    string
-	registries map[string]string   // alias -> repo URL
-	localDirs  map[string]string   // alias -> resolved local absolute path
-	commits    map[string]string   // alias -> resolved commit hash ("local" for local dirs)
+	registries map[string]string // alias -> repo URL
+	localDirs  map[string]string // alias -> resolved local absolute path
+	commits    map[string]string // alias -> resolved commit hash ("local" for local dirs)
 }
 
 // New creates a Registry. Pass a named sub-logger.

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/charmbracelet/huh"
 	"github.com/bakery-dev/bakery/internal/registry"
 	"github.com/bakery-dev/bakery/internal/resolver"
+	"github.com/charmbracelet/huh"
 )
 
 // Prompter renders interactive TUI forms for piece prompts.

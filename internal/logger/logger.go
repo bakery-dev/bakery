@@ -14,7 +14,7 @@ var global *slog.Logger
 func Setup(level string) {
 	l := parseLevel(level)
 	h := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: l,
+		Level:     l,
 		AddSource: false,
 	})
 	global = slog.New(h)

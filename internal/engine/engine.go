@@ -230,9 +230,9 @@ func (e *Engine) writePiefile(absTarget string, resolvedPieces []*resolver.Resol
 	}
 
 	type piefile struct {
-		Name        string                    `yaml:"name,omitempty"`
-		Description string                    `yaml:"description,omitempty"`
-		Pieces      map[string]*piefileEntry  `yaml:"pieces"`
+		Name        string                   `yaml:"name,omitempty"`
+		Description string                   `yaml:"description,omitempty"`
+		Pieces      map[string]*piefileEntry `yaml:"pieces"`
 	}
 
 	pieces := make(map[string]*piefileEntry, len(resolvedPieces))

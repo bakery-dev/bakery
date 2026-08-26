@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"log/slog"
+
 	"golang.org/x/mod/sumdb/dirhash"
 )
 
@@ -113,7 +114,7 @@ func TestIsLocalPath(t *testing.T) {
 	}{
 		{"/home/user/my-registry", true},
 		{"file:///home/user/my-registry", true},
-		{"./relative-path", false},        // not absolute, not file://
+		{"./relative-path", false}, // not absolute, not file://
 		{"github.com/user/repo", false},
 		{"https://github.com/user/repo", false},
 		{"git@github.com:user/repo.git", false},
