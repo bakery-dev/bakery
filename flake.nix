@@ -7,7 +7,7 @@
 
   outputs = { self, nixpkgs }:
     let
-      supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+      supportedSystems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
       nixpkgsFor = forAllSystems (system: import nixpkgs { inherit system; });
 
@@ -17,7 +17,7 @@
           pname = "bakery";
           version = "0.1.0";
           src = ./.;
-          vendorHash = "sha256-ebBSFDf2cmdqI7kLnosU0Inn2RQzWTenxHqf5cQd5Is=";
+          vendorHash = "sha256-7e8dOK1XK/HJxrZ9gbhKdoYJbO+TpJlpms5XmrM4j/M=";
           go = pkgs.go_1_27;
           ldflags = [ "-s" "-w" ];
           meta = with pkgs.lib; {
