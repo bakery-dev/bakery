@@ -17,7 +17,7 @@
           pname = "bakery";
           version = "0.1.0";
           src = ./.;
-          vendorHash = "sha256-7e8dOK1XK/HJxrZ9gbhKdoYJbO+TpJlpms5XmrM4j/M=";
+          vendorHash = "sha256-gmcGA0nC2wlbcy8MrzIDLYKksxMxrEukmDo2TyIqqLk=";
           go = pkgs.go_1_27;
           ldflags = [ "-s" "-w" ];
           meta = with pkgs.lib; {
